@@ -141,7 +141,7 @@ def summarize(user: dict, today: dt.date) -> dict:
 # --------------------------------------------------------------------------- type
 
 class Type:
-    FILES = {"display": "SpaceGrotesk-Bold", "sans": "Inter-Regular", "sans5": "Inter-Medium",
+    FILES = {"display": "PlayfairDisplay-SemiBold", "sans": "Inter-Regular", "sans5": "Inter-Medium",
              "mono": "JetBrainsMono-Regular"}
 
     def __init__(self) -> None:
@@ -158,19 +158,22 @@ class Type:
         for key, name in self.FILES.items():
             b64 = base64.b64encode((FONT_DIR / f"{name}.woff2").read_bytes()).decode()
             rules.append(f"@font-face{{font-family:f-{key};src:url(data:font/woff2;base64,{b64}) format('woff2')}}")
+        # Playfair's default figures are old-style; the card sets them lining.
+        rules.append('text[font-family="f-display"]{font-feature-settings:"lnum"}')
         return "".join(rules)
 
 # --------------------------------------------------------------------------- render
 
 THEMES = {
-    "dark": dict(card0="#0D0F24", card1="#121036", stroke="#FFFFFF", stroke_a=0.09, glass_a=0.045,
-                 text="#EEF0FF", text2="#B6BBD8", muted="#8288AD", faint="#2A2E52",
-                 violet="#A78BFA", cyan="#22D3EE", pink="#F472B6", teal="#2DD4BF", amber="#FBBF24",
-                 grad_a="#C4B5FD", grad_b="#67E8F9", glow="#7C3AED", glow_a=0.34, glow2="#0891B2", glow2_a=0.22),
-    "light": dict(card0="#FFFFFF", card1="#F6F4FF", stroke="#4C1D95", stroke_a=0.13, glass_a=0.72,
-                  text="#15132E", text2="#454A6B", muted="#686E91", faint="#E4E2F3",
-                  violet="#7C3AED", cyan="#0E7490", pink="#BE185D", teal="#0F766E", amber="#B45309",
-                  grad_a="#6D28D9", grad_b="#0E7490", glow="#C4B5FD", glow_a=0.45, glow2="#99F6E4", glow2_a=0.45),
+    # "Obsidian & Gold": the same tokens as design/common.py.
+    "dark": dict(card0="#15120F", card1="#0C0B09", plate="#0B0A08", line="#F4EFE6", line_a=0.12, line_a2=0.22,
+                 wash="#F4EFE6", wash_a=0.035, text="#F4EFE6", text2="#CFC7BA", muted="#9C9285", faint="#3F3A33",
+                 gold="#D4B06A", gold_ink="#D4B06A",
+                 langs=["#D4B06A", "#A98A52", "#CFC7BA", "#8E8579", "#5E5750", "#3F3A33"]),
+    "light": dict(card0="#FFFFFF", card1="#F7F4EE", plate="#FFFFFF", line="#15120E", line_a=0.13, line_a2=0.24,
+                  wash="#15120E", wash_a=0.03, text="#15120E", text2="#46403A", muted="#6B635A", faint="#DAD3C8",
+                  gold="#AE8836", gold_ink="#8A6113",
+                  langs=["#8A6113", "#C4A565", "#46403A", "#8E8579", "#B9B0A4", "#DAD3C8"]),
 }
 
 
@@ -187,77 +190,81 @@ def txt(x, y, s, font, size, fill, anchor="start", tracking=0, extra=""):
 
 def render(s: dict, theme: str, T: Type) -> str:
     t = THEMES[theme]
-    dark = theme == "dark"
-    W, H, L, R = 900, 384, 32, 868
+    W, H, L, R = 900, 384, 56, 844
     out = []
 
+    def kicker(x, y, label, anchor="start", size=11):
+        tw = T.width(label, "mono", size, tracking=2.2) + 18
+        x0 = x if anchor == "start" else x - tw
+        return (f'<rect x="{x0:.1f}" y="{y - size * 0.36:.1f}" width="12" height="1.2" fill="{t["gold_ink"]}"/>'
+                + txt(x0 + 18, y, label, "mono", size, t["gold_ink"], tracking=2.2))
+
     # header
-    out.append(txt(L, 44, "GITHUB PULSE", "mono", 12, t["cyan"], tracking=2.4))
-    out.append(txt(R, 44, f"last 12 months · updated {s['updated'].day} {s['updated']:%b %Y}", "mono", 11.5,
-                   t["muted"], anchor="end"))
+    out.append(kicker(L, 58, "GITHUB PULSE"))
+    peak_value = max((v for _, v in s["weekly"]), default=0)
+    out.append(txt(R, 58, f"last 12 months, weekly, peak {peak_value:,}  ·  updated {s['updated'].day} {s['updated']:%B %Y}",
+                   "mono", 10.5, t["muted"], anchor="end", tracking=0.3))
 
     # headline number + streaks
     total = f"{s['contributions']:,}"
-    out.append(txt(L - 2, 118, total, "display", 54, "url(#num)", extra='class="up"'))
-    out.append(txt(L, 144, "contributions in the last year", "sans", 13.5, t["text2"] if dark else t["muted"]))
+    out.append(txt(L - 2, 126, total, "display", 56, t["text"], extra='class="up"', tracking=-1))
+    out.append(txt(L, 150, "contributions in the last year", "sans", 13.5, t["text2"]))
     for i, (value, label) in enumerate([(s["current"], "current streak"), (s["longest"], "longest streak")]):
         x = L + i * 138
         num = f"{value:,}"
-        out.append(txt(x, 196, num, "display", 26, t["text"]))
-        out.append(txt(x + T.width(num, "display", 26) + 6, 196, "days" if value != 1 else "day", "sans5", 12.5, t["muted"]))
-        out.append(txt(x, 216, label, "sans", 12, t["muted"]))
+        out.append(txt(x, 200, num, "display", 26, t["text"]))
+        out.append(txt(x + T.width(num, "display", 26) + 6, 200, "days" if value != 1 else "day", "sans5", 12.5, t["muted"]))
+        out.append(txt(x, 219, label, "sans", 12, t["muted"]))
 
     # weekly bars
-    x0, x1, base, hmax = 356.0, float(R), 176.0, 104.0
+    x0, x1, base, hmax = 372.0, float(R), 176.0, 100.0
     n = max(len(s["weekly"]), 1)
     gap = 2.4
     bw = (x1 - x0 - gap * (n - 1)) / n
-    peak_value = max((v for _, v in s["weekly"]), default=0)
     peak = peak_value or 1
     bars, labels, last_label_x, last_month = [], [], -99.0, None
     for i, (start, v) in enumerate(s["weekly"]):
         x = x0 + i * (bw + gap)
         h = 2.0 if v == 0 else max(4.0, hmax * v / peak)
-        fill = rgba(t["muted"], 0.25) if v == 0 else "url(#bar)"
+        fill = rgba(t["muted"], 0.3) if v == 0 else t["gold"]
         bars.append(f'<rect class="bar" style="animation-delay:{i * 0.018:.3f}s" x="{x:.2f}" y="{base - h:.2f}" '
-                    f'width="{bw:.2f}" height="{h:.2f}" rx="{min(2.5, bw / 2):.2f}" fill="{fill}"/>')
+                    f'width="{bw:.2f}" height="{h:.2f}" fill="{fill}" fill-opacity="{0.5 + 0.5 * (v / peak):.2f}"/>')
         month = start[:7]
         if month != last_month:
             last_month = month
             if x - last_label_x >= 30:
-                name = dt.date.fromisoformat(start).strftime("%b")
-                labels.append(txt(x, base + 18, name, "mono", 10, t["muted"]))
+                name = dt.date.fromisoformat(start).strftime("%b").upper()
+                labels.append(txt(x, base + 18, name, "mono", 9.5, t["muted"], tracking=1))
                 last_label_x = x
-    out.append(f'<line x1="{x0}" y1="{base + 0.5}" x2="{x1}" y2="{base + 0.5}" stroke="{t["stroke"]}" stroke-opacity="{t["stroke_a"]}"/>')
+    out.append(f'<line x1="{x0}" y1="{base + 0.5}" x2="{x1}" y2="{base + 0.5}" stroke="{t["line"]}" stroke-opacity="{t["line_a2"]}"/>')
     out.extend(bars)
     out.extend(labels)
-    out.append(txt(x0, 64, f"weekly contributions · peak {peak_value:,}", "mono", 10.5, t["muted"]))
 
     # tiles
     tiles = [(s["commits"], "commits"), (s["prs"], "pull requests"), (s["repos"], "public repositories"),
              (s["stars"], "stars earned")]
-    ty, th, tg = 232, 64, 12
+    ty, th, tg = 236, 64, 14
     tw = (R - L - tg * 3) / 4
     for i, (value, label) in enumerate(tiles):
         x = L + i * (tw + tg)
         out.append(f'<rect class="fade" style="animation-delay:{0.25 + i * 0.08:.2f}s" x="{x:.1f}" y="{ty}" width="{tw:.1f}" '
-                   f'height="{th}" rx="14" fill="{rgba("#FFFFFF", t["glass_a"])}" stroke="{rgba(t["stroke"], t["stroke_a"] + 0.02)}"/>')
+                   f'height="{th}" rx="3" fill="{rgba(t["wash"], t["wash_a"])}" stroke="{t["line"]}" stroke-opacity="{t["line_a"]}"/>')
         out.append(txt(x + 16, ty + 31, f"{value:,}", "display", 22, t["text"]))
         out.append(txt(x + 16, ty + 50, label, "sans", 12, t["muted"]))
 
     # languages
-    ly = 326
-    out.append(txt(L, ly - 8, "TOP LANGUAGES", "mono", 10.5, t["muted"], tracking=1.8))
-    out.append(txt(R, ly - 8, "by code size across public repos; Python includes notebooks", "mono", 10.5,
-                   t["muted"], anchor="end"))
-    palette = [t["violet"], t["cyan"], t["pink"], t["teal"], t["amber"], t["muted"]]
+    ly = 334
+    out.append(kicker(L, ly - 10, "TOP LANGUAGES", size=10.5))
+    out.append(txt(R, ly - 10, "by code size across public repos; Python includes notebooks", "mono", 10.5,
+                   t["muted"], anchor="end", tracking=0.3))
+    palette = t["langs"]
     x = float(L)
     seg = []
     for i, (name, frac) in enumerate(s["langs"]):
         w = (R - L) * frac
-        seg.append(f'<rect x="{x:.2f}" y="{ly}" width="{max(w, 0.8):.2f}" height="10" fill="{palette[i % len(palette)]}"/>')
+        seg.append(f'<rect x="{x:.2f}" y="{ly}" width="{max(w, 0.8):.2f}" height="6" fill="{palette[i % len(palette)]}"/>')
         x += w
-    out.append(f'<clipPath id="lb"><rect x="{L}" y="{ly}" width="{R - L}" height="10" rx="5"/></clipPath>'
+    out.append(f'<clipPath id="lb"><rect x="{L}" y="{ly}" width="{R - L}" height="6" rx="1.5"/></clipPath>'
                f'<g clip-path="url(#lb)"><g class="grow">{"".join(seg)}</g></g>')
     lx = float(L)
     for i, (name, frac) in enumerate(s["langs"]):
@@ -265,18 +272,14 @@ def render(s: dict, theme: str, T: Type) -> str:
         label_w = T.width(name, "sans5", 12) + 6 + T.width(pct, "mono", 11)
         if lx + 14 + label_w > R:
             break
-        out.append(f'<circle cx="{lx + 4:.1f}" cy="{ly + 31}" r="4" fill="{palette[i % len(palette)]}"/>')
-        out.append(txt(lx + 14, ly + 35, name, "sans5", 12, t["text"]))
-        out.append(txt(lx + 14 + T.width(name, "sans5", 12) + 6, ly + 35, pct, "mono", 11, t["muted"]))
+        out.append(f'<rect x="{lx:.1f}" y="{ly + 24}" width="8" height="8" fill="{palette[i % len(palette)]}"/>')
+        out.append(txt(lx + 14, ly + 32, name, "sans5", 12, t["text"]))
+        out.append(txt(lx + 14 + T.width(name, "sans5", 12) + 6, ly + 32, pct, "mono", 11, t["muted"]))
         lx += 14 + label_w + 22
 
     defs = f"""
-    <clipPath id="fr"><rect width="{W}" height="{H}" rx="20"/></clipPath>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{t['card0']}"/><stop offset="1" stop-color="{t['card1']}"/></linearGradient>
-    <radialGradient id="g1" cx="0" cy="0" r="0.6"><stop offset="0" stop-color="{t['glow']}" stop-opacity="{t['glow_a']}"/><stop offset="1" stop-color="{t['glow']}" stop-opacity="0"/></radialGradient>
-    <radialGradient id="g2" cx="1" cy="0.4" r="0.55"><stop offset="0" stop-color="{t['glow2']}" stop-opacity="{t['glow2_a']}"/><stop offset="1" stop-color="{t['glow2']}" stop-opacity="0"/></radialGradient>
-    <linearGradient id="num" x1="0" x2="1"><stop offset="0" stop-color="{t['grad_a']}"/><stop offset="1" stop-color="{t['grad_b']}"/></linearGradient>
-    <linearGradient id="bar" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="{t['violet']}"/><stop offset="1" stop-color="{t['cyan']}"/></linearGradient>
+    <clipPath id="fr"><rect width="{W}" height="{H}" rx="6"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{t['card0']}"/><stop offset="1" stop-color="{t['card1']}"/></linearGradient>
     """
     css = T.css() + """
     .bar{transform-box:fill-box;transform-origin:50% 100%;animation:grow .9s cubic-bezier(.2,.7,.2,1) both}
@@ -295,10 +298,10 @@ def render(s: dict, theme: str, T: Type) -> str:
             f'aria-labelledby="t d" fill="none"><title id="t">GitHub pulse</title><desc id="d">{escape(desc)}</desc>'
             f'<style>{css}</style><defs>{defs}</defs>'
             f'<g clip-path="url(#fr)"><rect width="{W}" height="{H}" fill="url(#bg)"/>'
-            f'<rect width="{W}" height="{H}" fill="url(#g1)"/><rect width="{W}" height="{H}" fill="url(#g2)"/>'
+            f'<rect x="36" y="0" width="48" height="2" fill="{t["gold"]}"/>'
             + "".join(out) +
-            f'</g><rect x="0.5" y="0.5" width="{W - 1}" height="{H - 1}" rx="19.5" stroke="{t["stroke"]}" '
-            f'stroke-opacity="{t["stroke_a"]}"/></svg>')
+            f'</g><rect x="0.5" y="0.5" width="{W - 1}" height="{H - 1}" rx="5.5" stroke="{t["line"]}" '
+            f'stroke-opacity="{t["line_a"]}"/></svg>')
 
 
 def main() -> None:
